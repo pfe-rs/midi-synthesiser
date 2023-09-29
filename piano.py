@@ -80,30 +80,36 @@ def make_buffer(notes, samplerate = samplerate, buffer_size = 1024, ditter = 0.0
     return (buffer[:-1], new_notes)
 
 
-    (buffer, notes) = make_buffer(notes, samplerate, buffer_size, ditter)
+#(buffer, notes) = make_buffer(notes, samplerate, buffer_size, ditter)
         
 keys = {
-    "G" : 392.00,
-    "H" : 440.00,
-    "J" : 493.88,
+    "g" : 392.00,
+    "h" : 440.00,
+    "j" : 493.88,
 }
+
+pressed = set()
+
 
 from pynput import keyboard
 
 def on_press(key):
     try:
-        print('alphanumeric key {0} pressed'.format(
-            key.char))
+        #global pressed
+        pressed.add(key.char)
+        print(pressed)
     except AttributeError:
-        print('special key {0} pressed'.format(
-            key))
+        pass    
 
 def on_release(key):
-    print('{0} released'.format(
-        key))
+    try:
+        #global pressed
+        pressed.remove(key.char)
+        print(pressed)
+    except AttributeError:
+        pass
     if key == keyboard.Key.esc:
-        # Stop listener
-        return False
+        exit()
 
 # Collect events until released
 with keyboard.Listener(
@@ -118,23 +124,22 @@ listener = keyboard.Listener(
 listener.start()
 
 
+
+notes = {keys["g"] : Nota(make_note(keys["g"], coeffs=timbre_defaults))}
+
 event = threading.Event()
 
+
 def callback(outdata, frames, time, status):
-    global current_frame
+    global notes
     if status:
         print(status)
-    chunksize = min(len(data) - current_frame, frames)
-    outdata[:chunksize] = data[current_frame:current_frame + chunksize]
-    if chunksize < frames:
-        outdata[chunksize:] = 0
-        raise sd.CallbackStop()
+    buffer, notes = make_buffer(notes, samplerate = samplerate, buffer_size = frames, ditter = 0.01)
+    outdata[:] = buffer
 
-print(sd.query_devices())
-"""
 stream = sd.OutputStream(
-    samplerate=fs, device=args.device, channels=data.shape[1],
+    samplerate=samplerate, channels=1,
     callback=callback, finished_callback=event.set)
 with stream:
     event.wait()  # Wait until playback is finished
-"""
+
