@@ -81,41 +81,78 @@ def make_buffer(notes, samplerate = samplerate, buffer_size = 1024, ditter = 0.0
 
 
 #(buffer, notes) = make_buffer(notes, samplerate, buffer_size, ditter)
+      
+frequencies = {
+    "C4"	: 261.63,
+    "C#4" 	: 277.18,
+    "D4"	: 293.66,
+    "D#4" 	: 311.13,
+    "E4"	: 329.63,
+    "F4"	: 349.23,
+    "F#4" 	: 369.99,
+    "G4"	: 392.00,
+    "G#4" 	: 415.30,
+    "A4"	: 440.00,
+    "B4" 	: 466.16,
+    "H4"	: 493.88,
+    "C5"	: 523.25,
+    "C#5" 	: 554.37,
+    "D5"	: 587.33,
+    "D#5" 	: 622.25,
+    "E5"	: 659.25,
+    "F5"	: 698.46,
+    "F#5" 	: 739.99,
+    "G5"	: 783.99,
+    "G#5" 	: 830.61,
+    "A5"	: 880.00,
+    "B5" 	: 932.33,
+    "H5"	: 987.77,
+}
         
 keys = {
-    "g" : 392.00,
-    "h" : 440.00,
-    "j" : 493.88,
+    "a" : "C4",
+    "s" : "D4",
+    "d" : "E4",
+    "f" : "F4",
+    "j" : "G4",
+    "k" : "A4",
+    "l" : "B4",
+    ";" : "H4",
 }
 
 pressed = set()
 
+notes = {}
 
 from pynput import keyboard
 
 def on_press(key):
     try:
-        #global pressed
-        pressed.add(key.char)
-        print(pressed)
+        
+        if key.char not in pressed:
+            pressed.add(key.char)
+            if key.char in keys:
+                with mutex:
+                    notes[frequencies[keys[key.char]]] = Nota(make_note(frequencies[keys[key.char]], coeffs=timbre_defaults))
+            
+                print({press : keys[press] for press in pressed if press in keys})
+            
     except AttributeError:
         pass    
 
 def on_release(key):
     try:
-        #global pressed
+        if key.char in keys:
+            with mutex:
+                notes[frequencies[keys[key.char]]].released = True
+        
         pressed.remove(key.char)
-        print(pressed)
+        print({press : keys[press] for press in pressed if press in keys})
     except AttributeError:
         pass
-    if key == keyboard.Key.esc:
-        exit()
 
-# Collect events until released
-with keyboard.Listener(
-        on_press=on_press,
-        on_release=on_release) as listener:
-    listener.join()
+
+event = threading.Event()
 
 # ...or, in a non-blocking fashion:
 listener = keyboard.Listener(
@@ -123,23 +160,23 @@ listener = keyboard.Listener(
     on_release=on_release)
 listener.start()
 
-
-
-notes = {keys["g"] : Nota(make_note(keys["g"], coeffs=timbre_defaults))}
-
-event = threading.Event()
-
+from threading import Lock
+mutex = Lock()
 
 def callback(outdata, frames, time, status):
     global notes
     if status:
         print(status)
-    buffer, notes = make_buffer(notes, samplerate = samplerate, buffer_size = frames, ditter = 0.01)
-    outdata[:] = buffer
+        
+    with mutex:
+        buffer, notes = make_buffer(notes, samplerate = samplerate, buffer_size = frames, ditter = 0.01)
+    
+    outdata[:,0] = buffer
 
 stream = sd.OutputStream(
     samplerate=samplerate, channels=1,
     callback=callback, finished_callback=event.set)
+    
 with stream:
     event.wait()  # Wait until playback is finished
 
